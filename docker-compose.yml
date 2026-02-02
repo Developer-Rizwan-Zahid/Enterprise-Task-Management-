@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: task-mgmt-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: taskmgmt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mq:
+    image: rabbitmq:3-management-alpine
+    container_name: task-mgmt-mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:alpine
+    container_name: task-mgmt-redis
+    ports:
+      - "6379:6379"
+
+  task-service:
+    build:
+      context: ./TaskService
+      dockerfile: Dockerfile
+    container_name: task-service
+    depends_on:
+      - db
+      - mq
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Database=taskmgmt;Username=admin;Password=adminpassword
+      - RabbitMQ__Host=mq
+    ports:
+      - "5000:80"
+
+  analytics-service:
+    build:
+      context: ./AnalyticsService
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    depends_on:
+      - db
+      - mq
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://admin:adminpassword@db:5432/taskmgmt
+      - RABBITMQ_URL=amqp://guest:guest@mq:5672/
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
